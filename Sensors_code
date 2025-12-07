@@ -1,0 +1,122 @@
+//mbed library
+#include <mbed.h>
+#include <cmath>
+
+//to use the mbed library types without writing mbed::DigitalOut every time.
+using namespace mbed;
+
+
+//front ultrasonic sensor pins
+DigitalInOut us_front(P0_23);
+
+//timer for us sensor
+Timer us_t;
+
+
+I2C i2c(P0_31, P0_2);
+
+
+float dis_wall = 0;
+
+
+float us_r = 0;
+
+
+float read_us(){
+  us_front.output();
+  us_t.reset();
+  us_front = 0;
+  wait_us(5);
+  us_front = 1;
+  wait_us(10);
+  us_front = 0;
+  us_front.input();
+  us_t.reset();
+  us_t.start();
+  while(us_front.read() == 0 && us_t.read_us() < 30000){ }
+  if(us_front.read() == 0){
+      return -404;
+  }
+  us_t.reset();
+  us_t.start();
+  while(us_front.read() == 1 && us_t.read_us() < 30000){ }
+  us_t.stop();
+  float pw_us = us_t.read_us();
+  us_r = pw_us/58;
+  return us_r;
+
+}
+
+
+float read_l_ir(){
+  const char mux_cmd = 0x02;
+  const char mux_addr = 0xEE;
+  i2c.write(mux_addr, &mux_cmd, 1);
+  char cmd[2];
+  cmd[0] = 0x5E;
+  cmd[1] = 0x00;
+  i2c.write(0x80, cmd, 1);
+  wait_us(1000);
+  i2c.read(0x80, cmd, 2);
+  unsigned int raw_l = (cmd[0] << 4) |(cmd[1] >> 4);
+  float l_wall_dis = raw_l/64.0f;
+  return l_wall_dis;
+}
+
+float read_r_ir(){
+  const char mux_cmd = 0x04;
+  const char mux_addr = 0xEE;
+  i2c.write(mux_addr, &mux_cmd, 1);
+  char cmd[2];
+  cmd[0] = 0x5E;
+  cmd[1] = 0x00;
+  i2c.write(0x80, cmd, 1);
+  wait_us(1000);
+  i2c.read(0x80, cmd, 2);
+  unsigned int raw_r = (cmd[0] << 4) |(cmd[1] >> 4);
+  float r_wall_dis = raw_r/64.0f;
+  return r_wall_dis;
+}
+
+
+void setup() {
+
+  Serial.begin(9600);
+  i2c.frequency(100000);
+}
+
+void loop() {
+  long int avg_enc = (labs(enca) + labs(encb)) / 2;
+
+  if(mvng_frwrd){
+    if (avg_enc < tt){
+      keepstraight();
+      move(lcs, rcs);
+    } else{
+      stop();
+      mvng_frwrd = false;
+    }
+  }
+  else if(trnng){
+    if (tt > 0 && avg_enc < tt){
+      keepstraight();
+      move(lcs, -rcs);
+    } else if(tt < 0 && avg_enc < labs(tt)){
+      keepstraight();
+      move(-lcs, rcs);
+    }
+  } 
+/*  else{
+      dis_wall = read_us() - 5.23;
+      Serial.print("US reading: ");
+      Serial.println(dis_wall);
+      float target = dis_wall - 5;
+      if(target > 0){
+        move_frwrd(target, 0.4);
+      }
+  }*/
+
+  Serial.println(read_l_ir());
+  Serial.println(read_r_ir());
+  delay(2000);
+}
